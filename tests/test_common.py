@@ -22,6 +22,9 @@ from common import (
     copy_reference_files,
     decode_gguf_tensor,
     load_converted_tensors,
+    load_model_metadata,
+    load_reference_shapes,
+    model_metadata_file,
     write_shards,
 )
 
@@ -228,3 +231,66 @@ class TestLoadConvertedTensors:
         loaded = load_converted_tensors(str(tmp_path))
         assert "model.a.weight" in loaded
         assert "model.b.weight" in loaded
+
+
+# ---------------------------------------------------------------------------
+# load_model_metadata tests
+# ---------------------------------------------------------------------------
+class TestLoadModelMetadata:
+    def _write_safetensors(self, path: Path, tensors: dict[str, torch.Tensor]):
+        save_file(tensors, str(path))
+
+    def test_scans_safetensors_when_no_cache(self, tmp_path: Path):
+        self._write_safetensors(
+            tmp_path / "model.safetensors",
+            {"model.embed.weight": torch.ones(8, 4, dtype=torch.bfloat16)},
+        )
+        meta = load_model_metadata(str(tmp_path))
+        assert "model.embed.weight" in meta["shapes"]
+        assert meta["shapes"]["model.embed.weight"]["shape"] == [8, 4]
+        assert meta["shapes"]["model.embed.weight"]["dtype"] == "BF16"
+
+    def test_writes_cache_after_scan(self, tmp_path: Path):
+        self._write_safetensors(
+            tmp_path / "model.safetensors",
+            {"model.embed.weight": torch.ones(4, 4, dtype=torch.float32)},
+        )
+        assert not model_metadata_file(tmp_path).exists()
+        load_model_metadata(str(tmp_path))
+        assert model_metadata_file(tmp_path).exists()
+
+    def test_reads_from_cache(self, tmp_path: Path):
+        cached = {"shapes": {"model.w": {"shape": [2, 2], "dtype": "F32"}}}
+        model_metadata_file(tmp_path).write_text(json.dumps(cached))
+        meta = load_model_metadata(str(tmp_path))
+        assert meta == cached
+
+    def test_cache_takes_precedence_over_safetensors(self, tmp_path: Path):
+        cached = {"shapes": {"from.cache": {"shape": [1], "dtype": "F32"}}}
+        model_metadata_file(tmp_path).write_text(json.dumps(cached))
+        self._write_safetensors(
+            tmp_path / "model.safetensors",
+            {"from.safetensors": torch.ones(1)},
+        )
+        meta = load_model_metadata(str(tmp_path))
+        assert "from.cache" in meta["shapes"]
+        assert "from.safetensors" not in meta["shapes"]
+
+
+# ---------------------------------------------------------------------------
+# load_reference_shapes tests
+# ---------------------------------------------------------------------------
+class TestLoadReferenceShapes:
+    def test_returns_shape_dict(self, tmp_path: Path):
+        save_file(
+            {"model.a.weight": torch.ones(4, 8, dtype=torch.bfloat16)},
+            str(tmp_path / "model.safetensors"),
+        )
+        shapes = load_reference_shapes(str(tmp_path))
+        assert shapes == {"model.a.weight": [4, 8]}
+
+    def test_strips_dtype(self, tmp_path: Path):
+        cached = {"shapes": {"model.w": {"shape": [3, 5], "dtype": "BF16"}}}
+        model_metadata_file(tmp_path).write_text(json.dumps(cached))
+        shapes = load_reference_shapes(str(tmp_path))
+        assert shapes == {"model.w": [3, 5]}
