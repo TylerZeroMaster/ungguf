@@ -139,7 +139,7 @@ def convert_gguf_to_safetensors(
     reference_model: str,
     shard_size_mb: int = 4500,
     keep_fp16: bool = False,
-    ignore_missing_prefixes: list[str] | None = None
+    ignore_missing_prefixes: list[str] | None = None,
 ):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -302,10 +302,12 @@ def main():
     args = parser.parse_args()
 
     ignore_missing_prefixes = [
-        prefix for prefix, ignore_misisng in (
+        prefix
+        for prefix, ignore_missing in (
             ("mtp.", args.ignore_missing_mtp),
-            ("model.visual.", args.ignore_missing_visual)
-        ) if ignore_misisng
+            ("model.visual.", args.ignore_missing_visual),
+        )
+        if ignore_missing
     ]
 
     convert_gguf_to_safetensors(

@@ -2,9 +2,9 @@ import argparse
 import json
 import struct
 import sys
+from pathlib import Path
 
 import requests
-from gguf import Path
 
 from common import (
     DEFAULT_CONFIG_FILES,
@@ -16,15 +16,22 @@ from common import (
 _HF_BASE = "https://huggingface.co"
 
 
-def fetch_shard_header(
-    session: requests.Session, url: str
-) -> dict[str, TensorMeta]:
+def exit_for_status(r: requests.Response, context: str) -> None:
+    if not r.ok:
+        print(  # noqa: T201
+            f"HTTP Error fetching {context}: {r.status_code}\n{r.reason}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def fetch_shard_header(session: requests.Session, url: str) -> dict[str, TensorMeta]:
     r = session.get(url, headers={"Range": "bytes=0-7"})
-    r.raise_for_status()
+    exit_for_status(r, url)
     header_size = struct.unpack("<Q", r.content)[0]
 
     r = session.get(url, headers={"Range": f"bytes=8-{8 + header_size - 1}"})
-    r.raise_for_status()
+    exit_for_status(r, url)
     raw = json.loads(r.content)
 
     return {
@@ -37,35 +44,33 @@ def fetch_shard_header(
 def fetch_model_shards(
     session: requests.Session, repo_id: str, revision: str, hf_base: str
 ) -> set[str]:
-    index_url = (
-        f"{hf_base}/{repo_id}/resolve/{revision}/model.safetensors.index.json"
-    )
+    index_url = f"{hf_base}/{repo_id}/resolve/{revision}/model.safetensors.index.json"
     r = session.get(index_url)
 
     shards: set[str]
-    if r.status_code == 200:
+    success = 200
+    not_found = 404
+    if r.status_code == success:
         index = r.json()
         shards = set(index["weight_map"].values())
-    elif r.status_code == 404:
+    elif r.status_code == not_found:
         # single-shard model
         shards = {"model.safetensors"}
     else:
-        print(f"HTTP Error ({index_url}): {r.status_code}\n{r.reason}")
+        print(f"HTTP Error ({index_url}): {r.status_code}\n{r.reason}")  # noqa: T201
         sys.exit(1)
 
     return shards
 
 
-def fetch_model_shapes(
-    repo_id: str, revision: str, hf_base: str
-) -> dict[str, TensorMeta]:
+def fetch_model_shapes(repo_id: str, revision: str, hf_base: str) -> dict[str, TensorMeta]:
     with requests.Session() as session:
         shards = fetch_model_shards(session, repo_id, revision, hf_base)
 
         shapes: dict[str, TensorMeta] = {}
         for shard in sorted(shards):
             shard_url = f"{hf_base}/{repo_id}/resolve/{revision}/{shard}"
-            print(f"fetching header: {shard}")
+            print(f"Fetching header: {shard}")  # noqa: T201
             shapes.update(fetch_shard_header(session, shard_url))
 
     return shapes
@@ -109,9 +114,9 @@ def fetch_reference_files(
             if dst.exists():
                 continue
 
-            print(f"Fetching: {name}")
+            print(f"Fetching: {name}")  # noqa: T201
             r = session.get(url)
-            r.raise_for_status()
+            exit_for_status(r, name)
             dst.write_text(r.text)
 
         for name in files:
@@ -121,13 +126,13 @@ def fetch_reference_files(
             if dst.exists():
                 continue
 
-            print(f"Fetching: {name}")
+            print(f"Fetching: {name}")  # noqa: T201
             r = session.get(url)
             if not r.ok:
                 continue
             dst.write_text(r.text)
 
-    print(f"Downloaded reference files to: {output_dir}")
+    print(f"Downloaded reference files to: {output_dir}")  # noqa: T201
 
 
 def main():

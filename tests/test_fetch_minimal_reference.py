@@ -21,9 +21,7 @@ class TestFetchShardHeader:
     def _make_session(self, tensors):
         size_bytes, header_bytes = make_shard_bytes(tensors)
         size_resp = MagicMock(content=size_bytes, raise_for_status=MagicMock())
-        header_resp = MagicMock(
-            content=header_bytes, raise_for_status=MagicMock()
-        )
+        header_resp = MagicMock(content=header_bytes, raise_for_status=MagicMock())
         session = MagicMock()
         session.get.side_effect = [size_resp, header_resp]
         return session
@@ -79,9 +77,7 @@ class TestFetchShardHeader:
         session.get.return_value.reason = "Not Found"
 
         with pytest.raises(SystemExit):
-            fetch_shard_header(
-                session, "http://example.com/missing.safetensors"
-            )
+            fetch_shard_header(session, "http://example.com/missing.safetensors")
 
 
 class TestFetchModelShapes:
@@ -119,13 +115,9 @@ class TestFetchModelShapes:
             }
         }
 
-        index_resp = MagicMock(
-            status_code=200, json=MagicMock(return_value=index)
-        )
+        index_resp = MagicMock(status_code=200, json=MagicMock(return_value=index))
 
-        with patch(
-            "fetch_minimal_reference.requests.Session"
-        ) as mock_session_cls:
+        with patch("fetch_minimal_reference.requests.Session") as mock_session_cls:
             self._patch_session(
                 mock_session_cls,
                 (
@@ -136,9 +128,7 @@ class TestFetchModelShapes:
                     ]
                 ),
             )
-            result = fetch_model_shapes(
-                "org/model", "main", "https://huggingface.co"
-            )
+            result = fetch_model_shapes("org/model", "main", "https://huggingface.co")
 
         assert "model.embed_tokens.weight" in result
         assert "model.layers.0.self_attn.q_proj.weight" in result
@@ -153,27 +143,17 @@ class TestFetchModelShapes:
         }
         index_resp = MagicMock(status_code=404)
 
-        with patch(
-            "fetch_minimal_reference.requests.Session"
-        ) as mock_session_cls:
-            self._patch_session(
-                mock_session_cls, [index_resp, *self._shard_responses(tensors)]
-            )
-            result = fetch_model_shapes(
-                "org/single-shard-model", "main", "https://huggingface.co"
-            )
+        with patch("fetch_minimal_reference.requests.Session") as mock_session_cls:
+            self._patch_session(mock_session_cls, [index_resp, *self._shard_responses(tensors)])
+            result = fetch_model_shapes("org/single-shard-model", "main", "https://huggingface.co")
 
         assert "model.embed_tokens.weight" in result
 
     def test_unexpected_http_status_exits(self):
         index_resp = MagicMock(status_code=500, reason="Internal Server Error")
 
-        with patch(
-            "fetch_minimal_reference.requests.Session"
-        ) as mock_session_cls:
+        with patch("fetch_minimal_reference.requests.Session") as mock_session_cls:
             self._patch_session(mock_session_cls, [index_resp])
 
             with pytest.raises(SystemExit):
-                fetch_model_shapes(
-                    "org/model", "main", "https://huggingface.co"
-                )
+                fetch_model_shapes("org/model", "main", "https://huggingface.co")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import TypedDict
 
@@ -96,7 +97,9 @@ def load_model_metadata(ref_dir: str | Path) -> ModelMeta:
 
     try:
         model_meta = json.loads(meta_file.read_text())
-        assert "shapes" in model_meta, "Invalid metadata file"
+        if "shapes" not in model_meta:
+            print("Invalid metadata file", file=sys.stderr)  # noqa: T201
+            sys.exit(1)
         return model_meta
     except FileNotFoundError:
         pass
@@ -107,10 +110,7 @@ def load_model_metadata(ref_dir: str | Path) -> ModelMeta:
         with safe_open(str(p), framework="pt") as sf:
             for k in sf.keys():  # noqa: SIM118
                 t = sf.get_tensor(k)
-                shapes[k] = {
-                    "shape": list(t.shape),
-                    "dtype": TORCH_TO_SAFETENSORS_DTYPE[t.dtype]
-                }
+                shapes[k] = {"shape": list(t.shape), "dtype": TORCH_TO_SAFETENSORS_DTYPE[t.dtype]}
     meta_file.write_text(json.dumps(model_meta))
 
     return model_meta
