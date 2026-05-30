@@ -600,6 +600,30 @@ cmd_format() {
 		sh -c "ruff check --fix . && ruff format ."
 }
 
+cmd_fetch_reference() {
+	local ref_dir=""
+	local args=()
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--reference-model)
+			ref_dir="$2"
+			shift 2
+			;;
+		*) args+=("$1"); shift ;;
+		esac
+	done
+
+	[[ -n "$ref_dir" ]] || die "Usage: ungguf fetch-reference --repo-id <repo> --reference-model <dir> [--revision main] [--extra-file file.txt]"
+
+	mkdir -p "$ref_dir"
+	ref_dir="$(cd "$ref_dir" && pwd)"
+	export REF_MODEL_DIR="$ref_dir"
+
+	docker compose -f "$REPO_DIR/docker-compose.yml" run --rm fetch-reference \
+		python3 fetch_minimal_reference.py --reference-model /output "${args[@]}"
+}
+
 cmd_help() {
 	echo -e "Usage: ${BOLD}ungguf${RESET} <command> [args...]"
 	echo ""
@@ -614,7 +638,8 @@ cmd_help() {
 	echo -e "  ${BOLD}verify-qwen3${RESET} <gguf> <converted_dir>       Verify Qwen3 conversion is bit-exact"
 	echo -e "  ${BOLD}verify-qwen36${RESET} [--keep-fp16] <g> <c> <ref> Verify Qwen3.6 conversion is bit-exact"
 	echo -e "  ${BOLD}verify-qwen36-moe${RESET} [--keep-fp16] <g> <c> <ref> Verify Qwen3.6 MoE conversion is bit-exact"
-	echo -e "  ${BOLD}inspect${RESET} <gguf> [gguf2...]     Dump GGUF metadata and tensor names"
+	echo -e "  ${BOLD}fetch-reference${RESET} --repo-id <repo> --reference-model <dir> [--revision main] [--extra-file f]  Fetch minimal HF reference (no weights)
+  ${BOLD}inspect${RESET} <gguf> [gguf2...]     Dump GGUF metadata and tensor names"
 	echo -e "  ${BOLD}sanity${RESET} <model|gguf> [opts]    Run vLLM inference sanity check (GGUF or safetensors)"
 	echo -e "  ${BOLD}chat${RESET} <model_dir> [--bnb4]     Interactive chat with a model (BF16 or BNB-4bit)"
 	echo -e "         [--label X] [--quantize fp8] [--tp N] [--tokenizer /path] [--max-model-len N]"
@@ -673,6 +698,10 @@ verify-qwen36)
 verify-qwen36-moe)
 	shift
 	cmd_verify_qwen36_moe "$@"
+	;;
+fetch-reference)
+	shift
+	cmd_fetch_reference "$@"
 	;;
 inspect)
 	shift

@@ -291,6 +291,18 @@ services:
       - --output
       - /results/qwen36_moe_verification.json
 
+  fetch-reference:
+    build:
+      context: .
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ${REF_MODEL_DIR:-./reference_model}:/output
+    environment:
+      - PYTHONUNBUFFERED=1
+
   test:
     build:
       context: .
