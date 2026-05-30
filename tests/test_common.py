@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -266,15 +267,33 @@ class TestLoadModelMetadata:
         assert meta == cached
 
     def test_cache_takes_precedence_over_safetensors(self, tmp_path: Path):
+        shard = tmp_path / "model.safetensors"
+        self._write_safetensors(shard, {"from.safetensors": torch.ones(1)})
+        # Backdate the shard so the cache appears newer
+        old_time = shard.stat().st_mtime - 10
+        os.utime(shard, (old_time, old_time))
+
         cached = {"shapes": {"from.cache": {"shape": [1], "dtype": "F32"}}}
         model_metadata_file(tmp_path).write_text(json.dumps(cached))
-        self._write_safetensors(
-            tmp_path / "model.safetensors",
-            {"from.safetensors": torch.ones(1)},
-        )
+
         meta = load_model_metadata(str(tmp_path))
         assert "from.cache" in meta["shapes"]
         assert "from.safetensors" not in meta["shapes"]
+
+    def test_stale_cache_is_invalidated(self, tmp_path: Path):
+        shard = tmp_path / "model.safetensors"
+        self._write_safetensors(shard, {"model.w": torch.ones(2, 2, dtype=torch.float32)})
+
+        # Write a cache with stale content and backdate it
+        cached = {"shapes": {"stale.key": {"shape": [1], "dtype": "F32"}}}
+        meta_file = model_metadata_file(tmp_path)
+        meta_file.write_text(json.dumps(cached))
+        old_time = shard.stat().st_mtime - 10
+        os.utime(meta_file, (old_time, old_time))
+
+        meta = load_model_metadata(str(tmp_path))
+        assert "model.w" in meta["shapes"]
+        assert "stale.key" not in meta["shapes"]
 
 
 # ---------------------------------------------------------------------------

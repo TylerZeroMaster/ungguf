@@ -94,19 +94,22 @@ def load_model_metadata(ref_dir: str | Path) -> ModelMeta:
     ref_path = Path(ref_dir)
     meta_file = model_metadata_file(ref_dir)
     model_meta: ModelMeta
+    safetensors_files = sorted(ref_path.glob("*.safetensors"))
 
     try:
-        model_meta = json.loads(meta_file.read_text())
-        if "shapes" not in model_meta:
-            print("Invalid metadata file", file=sys.stderr)  # noqa: T201
-            sys.exit(1)
-        return model_meta
+        cache_mtime = meta_file.stat().st_mtime
+        if not any(p.stat().st_mtime > cache_mtime for p in safetensors_files):
+            model_meta = json.loads(meta_file.read_text())
+            if "shapes" not in model_meta:
+                print("Invalid metadata file", file=sys.stderr)  # noqa: T201
+                sys.exit(1)
+            return model_meta
     except FileNotFoundError:
         pass
 
     model_meta = {"shapes": {}}
     shapes = model_meta["shapes"]
-    for p in sorted(ref_path.glob("*.safetensors")):
+    for p in safetensors_files:
         with safe_open(str(p), framework="pt") as sf:
             for k in sf.keys():  # noqa: SIM118
                 t = sf.get_tensor(k)
