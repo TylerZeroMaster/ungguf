@@ -64,11 +64,17 @@ _ensure_vllm_image() {
 
 cmd_convert_qwen35() {
 	local keep_fp16=false
-	if [[ "${1:-}" == "--keep-fp16" ]]; then
-		keep_fp16=true
-		shift
-	fi
-	[[ $# -ge 3 ]] || die "Usage: ungguf convert-qwen35 [--keep-fp16] <gguf_file> <output_dir> <ref_model_dir>"
+	local ignore_mtp=false
+	local ignore_visual=false
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--keep-fp16) keep_fp16=true; shift ;;
+		--ignore-missing-mtp) ignore_mtp=true; shift ;;
+		--ignore-missing-visual) ignore_visual=true; shift ;;
+		*) break ;;
+		esac
+	done
+	[[ $# -ge 3 ]] || die "Usage: ungguf convert-qwen35 [--keep-fp16] [--ignore-missing-mtp] [--ignore-missing-visual] <gguf_file> <output_dir> <ref_model_dir>"
 	local gguf_path="$1"
 	local output_dir="$2"
 	local ref_dir="$3"
@@ -89,6 +95,8 @@ cmd_convert_qwen35() {
 		--gguf "/input/$gguf_file" --output /output
 		--reference-model /ref --shard-size-mb "${SHARD_SIZE_MB:-4500}")
 	if $keep_fp16; then cmd+=(--keep-fp16); fi
+	if $ignore_mtp; then cmd+=(--ignore-missing-mtp); fi
+	if $ignore_visual; then cmd+=(--ignore-missing-visual); fi
 
 	docker compose -f "$REPO_DIR/docker-compose.yml" run --rm convert-qwen35 "${cmd[@]}"
 }
@@ -628,7 +636,7 @@ cmd_help() {
 	echo -e "Usage: ${BOLD}ungguf${RESET} <command> [args...]"
 	echo ""
 	echo -e "  ${BOLD}build${RESET} [convert|inference]   Build Docker images (default: convert)"
-	echo -e "  ${BOLD}convert-qwen35${RESET} [--keep-fp16] <g> <o> <r>  Convert Qwen3.5 GGUF to safetensors"
+	echo -e "  ${BOLD}convert-qwen35${RESET} [--keep-fp16] [--ignore-missing-mtp] [--ignore-missing-visual] <g> <o> <r>  Convert Qwen3.5 GGUF to safetensors"
 	echo -e "  ${BOLD}convert-glm47${RESET} [--keep-fp16] <g> <o> <r>  Convert GLM-4.7 / deepseek2 GGUF"
 	echo -e "  ${BOLD}convert-qwen3${RESET} [--keep-fp16] <g> <o> <r>   Convert Qwen3 GGUF to safetensors"
 	echo -e "  ${BOLD}convert-qwen36${RESET} [--keep-fp16] <g> <o> <r>  Convert Qwen3.6 GGUF to safetensors"
