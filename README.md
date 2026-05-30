@@ -48,6 +48,17 @@ uses this to:
 You can download reference models from HuggingFace. The reference doesn't need to be the same
 quantization — it just needs to be the same architecture with matching tensor names and shapes.
 
+If you don't want to download the full model weights (which can be tens of GB), you can fetch
+just the metadata needed for conversion using `fetch-reference`:
+
+```bash
+./ungguf.sh fetch-reference --repo-id Qwen/Qwen3-235B-A22B --reference-model ./reference_model
+```
+
+This downloads only the safetensors header bytes from each shard (a few KB total) plus
+`config.json` and tokenizer files, then caches the tensor shapes in
+`ungguf_model_meta.json`. The converters use this cache automatically.
+
 ## Quick start
 
 ### 1. Build the Docker image
@@ -148,6 +159,7 @@ Commands:
   verify-qwen36-moe [--keep-fp16] <g> <c> <r>  Verify Qwen3.6 MoE conversion (bit-exact)
   verify-glm47   [--keep-fp16] <g> <c> <r>  Verify GLM-4.7 conversion (bit-exact)
   verify-qwen3   [--keep-fp16] <g> <c>      Verify Qwen3 conversion (bit-exact)
+  fetch-reference --repo-id <r> --reference-model <dir>  Fetch minimal HF reference (no weights)
   inspect        <gguf> [gguf2 ...]          Dump GGUF metadata and tensor layout
   sanity         <model|gguf> [opts]         Run vLLM inference sanity check
   test           [pytest-args...]            Run unit tests inside Docker
