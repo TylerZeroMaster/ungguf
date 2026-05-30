@@ -139,6 +139,7 @@ def convert_gguf_to_safetensors(
     reference_model: str,
     shard_size_mb: int = 4500,
     keep_fp16: bool = False,
+    ignore_missing_prefixes: list[str] | None = None
 ):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -249,6 +250,14 @@ def convert_gguf_to_safetensors(
 
     # Verify coverage: all reference tensors must be present
     missing = [k for k in ref_shapes if k not in hf_tensors]
+    if ignore_missing_prefixes:
+        keep = []
+        for k in missing:
+            if not any(k.startswith(i) for i in ignore_missing_prefixes):
+                keep.append(k)
+            else:
+                print(f"Missing tensor explicitly ignored: {k}")
+        missing = keep
     if missing:
         print(f"\nERROR: {len(missing)} reference tensors not produced:", file=sys.stderr)
         for name in missing[:_MAX_DISPLAY]:
@@ -280,7 +289,24 @@ def main():
         action="store_true",
         help="Preserve float16 tensors as-is instead of converting to bfloat16",
     )
+    parser.add_argument(
+        "--ignore-missing-mtp",
+        action="store_true",
+        help="Ignore missing mtp keys",
+    )
+    parser.add_argument(
+        "--ignore-missing-visual",
+        action="store_true",
+        help="Ignore missing visual keys",
+    )
     args = parser.parse_args()
+
+    ignore_missing_prefixes = [
+        prefix for prefix, ignore_misisng in (
+            ("mtp.", args.ignore_missing_mtp),
+            ("model.visual.", args.ignore_missing_visual)
+        ) if ignore_misisng
+    ]
 
     convert_gguf_to_safetensors(
         gguf_path=args.gguf,
@@ -288,6 +314,7 @@ def main():
         reference_model=args.reference_model,
         shard_size_mb=args.shard_size_mb,
         keep_fp16=args.keep_fp16,
+        ignore_missing_prefixes=ignore_missing_prefixes,
     )
 
 
