@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 import torch
@@ -13,6 +14,28 @@ from gguf.constants import GGMLQuantizationType
 from safetensors import safe_open
 from safetensors.torch import save_file
 from tqdm import tqdm
+
+
+class TensorMeta(TypedDict):
+    shape: list[int]
+    dtype: str
+
+
+class ModelMeta(TypedDict):
+    shapes: dict[str, TensorMeta]
+
+
+TORCH_TO_SAFETENSORS_DTYPE = {
+    torch.float32: "F32",
+    torch.float16: "F16",
+    torch.bfloat16: "BF16",
+    torch.int64: "I64",
+    torch.int32: "I32",
+    torch.int16: "I16",
+    torch.int8: "I8",
+    torch.uint8: "U8",
+    torch.bool: "BOOL",
+}
 
 
 def decode_gguf_tensor(
@@ -58,17 +81,49 @@ def decode_gguf_tensor(
         return torch.from_numpy(weights).to(torch.bfloat16).reshape(shape)
 
 
-def load_reference_shapes(ref_dir: str) -> dict[str, list[int]]:
-    """Load tensor shapes from a reference safetensors model directory.
+def model_metadata_file(ref_dir: str | Path) -> Path:
+    return Path(ref_dir) / "ungguf_model_meta.json"
+
+
+def load_model_metadata(ref_dir: str | Path) -> ModelMeta:
+    """Load model metadata from a reference model directory.
 
     Reads only metadata (not full tensor data) to minimise memory usage.
     """
-    shapes = {}
-    for p in sorted(Path(ref_dir).glob("*.safetensors")):
+    ref_path = Path(ref_dir)
+    meta_file = model_metadata_file(ref_dir)
+    model_meta: ModelMeta
+
+    try:
+        model_meta = json.loads(meta_file.read_text())
+        assert "shapes" in model_meta, "Invalid metadata file"
+        return model_meta
+    except FileNotFoundError:
+        pass
+
+    model_meta = {"shapes": {}}
+    shapes = model_meta["shapes"]
+    for p in sorted(ref_path.glob("*.safetensors")):
         with safe_open(str(p), framework="pt") as sf:
             for k in sf.keys():  # noqa: SIM118
-                shapes[k] = list(sf.get_tensor(k).shape)
-    return shapes
+                t = sf.get_tensor(k)
+                shapes[k] = {
+                    "shape": list(t.shape),
+                    "dtype": TORCH_TO_SAFETENSORS_DTYPE[t.dtype]
+                }
+    meta_file.write_text(json.dumps(model_meta))
+
+    return model_meta
+
+
+def load_reference_shapes(ref_dir: str | Path) -> dict[str, list[int]]:
+    """Load tensor shapes from a reference model directory.
+
+    Reads only metadata (not full tensor data) to minimise memory usage.
+    """
+    model_meta = load_model_metadata(ref_dir)
+    shapes = model_meta["shapes"]
+    return {key: meta["shape"] for key, meta in shapes.items()}
 
 
 def load_converted_tensors(conv_dir: str) -> dict[str, torch.Tensor]:
