@@ -3,6 +3,7 @@ import struct
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from fetch_minimal_reference import (
     fetch_model_shapes,
@@ -72,12 +73,14 @@ class TestFetchShardHeader:
 
     def test_exits_on_http_error(self):
         session = MagicMock()
-        session.get.return_value.ok = False
-        session.get.return_value.status_code = 404
-        session.get.return_value.reason = "Not Found"
+        mock_response = session.get.return_value
+        mock_error = requests.HTTPError("404 Client Error: Not Found", response=mock_response)
+        mock_response.raise_for_status.side_effect = mock_error
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             fetch_shard_header(session, "http://example.com/missing.safetensors")
+
+        assert exc_info.value.code == 1
 
 
 class TestFetchModelShapes:

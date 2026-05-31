@@ -17,11 +17,10 @@ _HF_BASE = "https://huggingface.co"
 
 
 def exit_for_status(r: requests.Response, context: str) -> None:
-    if not r.ok:
-        print(  # noqa: T201
-            f"HTTP Error fetching {context}: {r.status_code}\n{r.reason}",
-            file=sys.stderr,
-        )
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as e:
+        print(f"HTTP Error fetching {context}: {e}", file=sys.stderr)  # noqa: T201
         sys.exit(1)
 
 
